@@ -4,7 +4,7 @@ State management utilities for saving and loading reading progress.
 
 import json
 import os
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
 
 
 class StateManager:
@@ -133,6 +133,33 @@ class StateManager:
                 return json.load(f)
         except (json.JSONDecodeError, FileNotFoundError, OSError, IOError):
             return {}
+    
+    def get_recent_files(self, max_files: int = 5) -> List[Tuple[str, int, int]]:
+        """
+        Get recent files with their progress information.
+        
+        Args:
+            max_files: Maximum number of recent files to return
+            
+        Returns:
+            List of tuples (file_path, word_index, total_words) sorted by most recent
+        """
+        try:
+            with open(self.progress_file, 'r', encoding='utf-8') as f:
+                progress_data = json.load(f)
+            
+            # Sort by word index (higher index = more progress = more recent)
+            sorted_files = sorted(progress_data.items(), key=lambda x: x[1], reverse=True)
+            
+            recent_files = []
+            for file_path, word_index in sorted_files[:max_files]:
+                # Get just the filename for display
+                filename = os.path.basename(file_path)
+                recent_files.append((file_path, word_index, 0))  # total_words will be filled later
+            
+            return recent_files
+        except (json.JSONDecodeError, FileNotFoundError, OSError, IOError):
+            return []
 
 
 # Convenience functions for backward compatibility

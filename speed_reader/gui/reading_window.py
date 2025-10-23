@@ -58,7 +58,8 @@ class ReadingWindow(QWidget):
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("Speed Reader - Reading")
-        self.setWindowState(Qt.WindowState.WindowFullScreen)
+        # Set fullscreen properly
+        self.showFullScreen()
         
         # Main layout
         layout = QVBoxLayout()
@@ -80,6 +81,12 @@ class ReadingWindow(QWidget):
         self.para_start_btn = QPushButton("Paragraph Start (|<)")
         self.para_start_btn.clicked.connect(self.rewind_to_paragraph)
         
+        self.next_para_btn = QPushButton("Next Paragraph (|>)")
+        self.next_para_btn.clicked.connect(self.jump_to_next_paragraph)
+        
+        self.jump_btn = QPushButton("Jump to Word (#)")
+        self.jump_btn.clicked.connect(self.jump_to_word)
+        
         self.play_pause_btn = QPushButton("Play (►)")
         self.play_pause_btn.clicked.connect(self.toggle_play_pause)
         
@@ -90,6 +97,8 @@ class ReadingWindow(QWidget):
         control_layout.addWidget(self.reset_btn)
         control_layout.addWidget(self.rewind_10_btn)
         control_layout.addWidget(self.para_start_btn)
+        control_layout.addWidget(self.next_para_btn)
+        control_layout.addWidget(self.jump_btn)
         control_layout.addStretch()
         control_layout.addWidget(self.play_pause_btn)
         control_layout.addWidget(self.settings_btn)
@@ -257,9 +266,19 @@ class ReadingWindow(QWidget):
         if self.current_index >= len(self.words):
             status = "Reading Complete!"
         elif self.is_paused:
-            status = f"Paused - Word {self.words_read + 1} of {self.total_word_count}"
+            remaining_words = self.total_word_count - self.words_read
+            eta_minutes = remaining_words / self.settings['wpm'] if self.settings['wpm'] > 0 else 0
+            eta_hours = int(eta_minutes // 60)
+            eta_mins = int(eta_minutes % 60)
+            eta_text = f"{eta_hours}h {eta_mins}m" if eta_hours > 0 else f"{eta_mins}m"
+            status = f"Paused - Word {self.words_read + 1} of {self.total_word_count} - ETA: {eta_text}"
         else:
-            status = f"Reading - Word {self.words_read + 1} of {self.total_word_count} ({self.settings['wpm']} WPM)"
+            remaining_words = self.total_word_count - self.words_read
+            eta_minutes = remaining_words / self.settings['wpm'] if self.settings['wpm'] > 0 else 0
+            eta_hours = int(eta_minutes // 60)
+            eta_mins = int(eta_minutes % 60)
+            eta_text = f"{eta_hours}h {eta_mins}m" if eta_hours > 0 else f"{eta_mins}m"
+            status = f"Reading - Word {self.words_read + 1} of {self.total_word_count} ({self.settings['wpm']} WPM) - ETA: {eta_text}"
         
         self.status_label.setText(status)
     
@@ -321,6 +340,76 @@ class ReadingWindow(QWidget):
         
         self.update_status()
     
+    def jump_to_next_paragraph(self):
+        """Jump to the start of the next paragraph."""
+        self.timer.stop()
+        
+        # Find the next paragraph break
+        new_index = self.current_index
+        while new_index < len(self.words) - 1:
+            new_index += 1
+            if self.words[new_index] == "__PARAGRAPH_BREAK__":
+                new_index += 1  # Start after the break
+                break
+        
+        # Count words to adjust words_read counter
+        words_in_paragraph = 0
+        for i in range(self.current_index, new_index):
+            if i < len(self.words) and self.words[i] != "__PARAGRAPH_BREAK__":
+                words_in_paragraph += 1
+        
+        self.current_index = min(new_index, len(self.words) - 1)
+        self.words_read = min(self.words_read + words_in_paragraph, self.total_word_count)
+        self.progress_bar.setValue(self.words_read)
+        
+        if self.current_index < len(self.words):
+            self.word_label.setText(self.words[self.current_index])
+        
+        self.update_status()
+    
+    def jump_to_word(self):
+        """Open dialog to jump to a specific word number."""
+        from PyQt6.QtWidgets import QInputDialog
+        
+        max_word = self.total_word_count
+        current_word = self.words_read + 1
+        
+        word_num, ok = QInputDialog.getInt(
+            self, 
+            "Jump to Word", 
+            f"Enter word number (1-{max_word}):", 
+            current_word, 
+            1, 
+            max_word, 
+            1
+        )
+        
+        if ok:
+            self.timer.stop()
+            
+            # Convert word number to index (word_num is 1-based, index is 0-based)
+            target_word_count = word_num - 1
+            
+            # Find the index that corresponds to this word count
+            new_index = 0
+            word_count = 0
+            
+            for i, word in enumerate(self.words):
+                if word != "__PARAGRAPH_BREAK__":
+                    if word_count == target_word_count:
+                        new_index = i
+                        break
+                    word_count += 1
+            
+            self.current_index = new_index
+            self.words_read = target_word_count
+            self.progress_bar.setValue(self.words_read)
+            
+            if self.current_index < len(self.words):
+                self.word_label.setText(self.words[self.current_index])
+            
+            self.update_status()
+    
     def open_settings_dialog(self):
         """Open the settings dialog for on-the-fly changes."""
         was_paused = self.is_paused
@@ -349,9 +438,16 @@ class ReadingWindow(QWidget):
         elif event.key() == Qt.Key.Key_S:
             self.open_settings_dialog()
         elif event.key() == Qt.Key.Key_Escape:
-            self.close()
+            self.return_to_main()
         else:
             super().keyPressEvent(event)
+    
+    def return_to_main(self):
+        """Return to main window."""
+        self.timer.stop()
+        save_progress(self.file_path, self.current_index)
+        self.closed.emit()
+        self.close()
     
     def closeEvent(self, event):
         """Handle window close event."""

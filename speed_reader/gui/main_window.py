@@ -6,13 +6,13 @@ import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
     QSpinBox, QDoubleSpinBox, QComboBox, QFileDialog, QMessageBox,
-    QGroupBox, QFormLayout
+    QGroupBox, QFormLayout, QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from ..utils.parser import parse_document
-from ..utils.state_manager import load_progress
+from ..utils.state_manager import load_progress, StateManager
 from .reading_window import ReadingWindow
 
 
@@ -23,12 +23,14 @@ class MainWindow(QWidget):
         super().__init__()
         self.selected_file = None
         self.reading_window = None
+        self.state_manager = StateManager()
         self.init_ui()
+        self.load_recent_files()
     
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("Speed Reader")
-        self.setFixedSize(500, 400)
+        self.setFixedSize(600, 500)
         
         # Main layout
         layout = QVBoxLayout()
@@ -90,6 +92,18 @@ class MainWindow(QWidget):
         settings_group.setLayout(settings_layout)
         layout.addWidget(settings_group)
         
+        # Recent files section
+        recent_group = QGroupBox("Recent Readings")
+        recent_layout = QVBoxLayout()
+        
+        self.recent_list = QListWidget()
+        self.recent_list.setMaximumHeight(100)
+        self.recent_list.itemClicked.connect(self.on_recent_file_selected)
+        recent_layout.addWidget(self.recent_list)
+        
+        recent_group.setLayout(recent_layout)
+        layout.addWidget(recent_group)
+        
         # Start reading button
         self.start_reading_btn = QPushButton("Start Reading")
         self.start_reading_btn.setEnabled(False)
@@ -142,9 +156,15 @@ class MainWindow(QWidget):
                 border: 1px solid #cccccc;
                 border-radius: 3px;
                 background-color: #f0f0f0;
+                color: #000000;
             }
             QPushButton:hover {
                 background-color: #e0e0e0;
+                color: #000000;
+            }
+            QPushButton:pressed {
+                background-color: #d0d0d0;
+                color: #000000;
             }
         """)
     
@@ -161,9 +181,10 @@ class MainWindow(QWidget):
             self.selected_file = file_path
             # Display just the filename, not the full path
             filename = os.path.basename(file_path)
-            self.file_label.setText(f"Selected: {filename}")
-            self.file_label.setStyleSheet("color: #333; font-style: normal;")
-            self.start_reading_btn.setEnabled(True)
+        self.file_label.setText(f"Selected: {filename}")
+        self.file_label.setStyleSheet("color: #333; font-style: normal;")
+        self.start_reading_btn.setEnabled(True)
+        self.load_recent_files()  # Refresh recent files list
     
     def start_reading(self):
         """Start the reading session with the selected file and settings."""
@@ -199,6 +220,9 @@ class MainWindow(QWidget):
                 settings=settings
             )
             
+            # Connect the closed signal to show main window
+            self.reading_window.closed.connect(self.show_main_window)
+            
             # Hide main window and show reading window
             self.hide()
             self.reading_window.show()
@@ -211,6 +235,42 @@ class MainWindow(QWidget):
                 self, 
                 "Error", 
                 f"Failed to open the document:\n{str(e)}"
+            )
+    
+    def show_main_window(self):
+        """Show the main window when returning from reading."""
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.load_recent_files()  # Refresh recent files when returning
+    
+    def load_recent_files(self):
+        """Load and display recent files."""
+        self.recent_list.clear()
+        recent_files = self.state_manager.get_recent_files(5)
+        
+        for file_path, word_index, total_words in recent_files:
+            filename = os.path.basename(file_path)
+            item_text = f"{filename} (Word {word_index + 1})"
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemDataRole.UserRole, file_path)
+            self.recent_list.addItem(item)
+    
+    def on_recent_file_selected(self, item):
+        """Handle selection of a recent file."""
+        try:
+            file_path = item.data(Qt.ItemDataRole.UserRole)
+            if file_path and os.path.exists(file_path):
+                self.selected_file = file_path
+                filename = os.path.basename(file_path)
+                self.file_label.setText(f"Selected: {filename}")
+                self.file_label.setStyleSheet("color: #333; font-style: normal;")
+                self.start_reading_btn.setEnabled(True)
+        except Exception as e:
+            QMessageBox.critical(
+                self, 
+                "Error", 
+                f"Failed to select the file:\n{str(e)}"
             )
     
     def closeEvent(self, event):
