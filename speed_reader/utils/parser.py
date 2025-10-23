@@ -6,6 +6,13 @@ import os
 import re
 from typing import Tuple, List
 
+# Turkish short edatlar (particles) that should be merged with the previous word for better reading experience
+TURKISH_SHORT_EDATLAR = {
+    'de', 'da',  # bulunma durumu eki
+    'mi', 'mu', 'mı', 'mü',  # soru eki
+    'ki',  # bağlaç
+}
+
 try:
     import fitz  # PyMuPDF
     FITZ_AVAILABLE = True
@@ -102,6 +109,7 @@ def _parse_epub(file_path: str) -> Tuple[List[str], int]:
 def _process_text(text: str) -> Tuple[List[str], int]:
     """
     Process raw text into a list of words with paragraph break markers.
+    Applies smart word merging for Turkish edatlar to improve reading experience.
     
     Args:
         text: Raw text content
@@ -128,12 +136,52 @@ def _process_text(text: str) -> Tuple[List[str], int]:
         # Split paragraph into words
         words = re.findall(r'\b\w+\b', paragraph)
         
+        # Apply smart word merging for Turkish edatlar
+        merged_words = _merge_turkish_edatlar(words)
+        
         # Add words to the list
-        word_list.extend(words)
-        total_word_count += len(words)
+        word_list.extend(merged_words)
+        total_word_count += len(merged_words)
         
         # Add paragraph break marker (except for the last paragraph)
-        if i < len(paragraphs) - 1 and words:  # Only add break if paragraph has words
+        if i < len(paragraphs) - 1 and merged_words:  # Only add break if paragraph has words
             word_list.append("__PARAGRAPH_BREAK__")
     
     return word_list, total_word_count
+
+
+def _merge_turkish_edatlar(words: List[str]) -> List[str]:
+    """
+    Merge Turkish short edatlar with the previous word for better reading experience.
+    Keeps the space between words for proper display.
+    
+    Args:
+        words: List of words to process
+        
+    Returns:
+        List of words with short edatlar merged (with space preserved)
+    """
+    if not words:
+        return words
+    
+    merged_words = []
+    i = 0
+    
+    while i < len(words):
+        current_word = words[i].lower()
+        
+        # Check if current word is a Turkish short edat and we have a previous word
+        if (current_word in TURKISH_SHORT_EDATLAR and 
+            merged_words and 
+            merged_words[-1] != "__PARAGRAPH_BREAK__"):
+            # Merge with previous word, keeping the space
+            previous_word = merged_words[-1]
+            merged_word = previous_word + " " + current_word
+            merged_words[-1] = merged_word
+        else:
+            # Keep word as is
+            merged_words.append(words[i])
+        
+        i += 1
+    
+    return merged_words

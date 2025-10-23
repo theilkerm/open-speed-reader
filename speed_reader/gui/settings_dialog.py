@@ -4,7 +4,7 @@ Settings dialog for changing reading parameters during reading.
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QFormLayout,
-    QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox
+    QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox, QLabel
 )
 from PyQt6.QtCore import Qt
 
