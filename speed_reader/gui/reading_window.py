@@ -1,0 +1,367 @@
+"""
+Fullscreen reading window for displaying words at specified WPM.
+"""
+
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
+    QProgressBar, QMessageBox, QDialog
+)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QFont, QKeySequence
+
+from ..utils.state_manager import save_progress
+from .settings_dialog import SettingsDialog
+
+
+class ReadingWindow(QWidget):
+    """Fullscreen window for reading text word by word."""
+    
+    # Signal emitted when window is closed to return to main window
+    closed = pyqtSignal()
+    
+    def __init__(self, word_list, total_word_count, start_index, file_path, settings):
+        """
+        Initialize the reading window.
+        
+        Args:
+            word_list: List of words with paragraph break tokens
+            total_word_count: Total count of actual words
+            start_index: Starting word index
+            file_path: Path to the document file
+            settings: Dictionary with reading settings
+        """
+        super().__init__()
+        
+        # Store parameters
+        self.words = word_list
+        self.total_word_count = total_word_count
+        self.current_index = start_index
+        self.file_path = file_path
+        self.settings = settings.copy()
+        
+        # Reading state
+        self.is_paused = True
+        self.words_read = 0  # Counter for actual words (excluding break tokens)
+        
+        # Timer for word display
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.show_next_word)
+        
+        # Initialize UI
+        self.init_ui()
+        self.update_timer_interval()
+        self.apply_styles()
+        
+        # Set focus to receive key events
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    
+    def init_ui(self):
+        """Initialize the user interface."""
+        self.setWindowTitle("Speed Reader - Reading")
+        self.setWindowState(Qt.WindowState.WindowFullScreen)
+        
+        # Main layout
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
+        
+        # Top control bar
+        control_bar = QWidget()
+        control_layout = QHBoxLayout()
+        control_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Control buttons
+        self.reset_btn = QPushButton("Reset (<<)")
+        self.reset_btn.clicked.connect(self.reset_reading)
+        
+        self.rewind_10_btn = QPushButton("10 Words Back (<)")
+        self.rewind_10_btn.clicked.connect(self.rewind_10_words)
+        
+        self.para_start_btn = QPushButton("Paragraph Start (|<)")
+        self.para_start_btn.clicked.connect(self.rewind_to_paragraph)
+        
+        self.play_pause_btn = QPushButton("Play (►)")
+        self.play_pause_btn.clicked.connect(self.toggle_play_pause)
+        
+        self.settings_btn = QPushButton("Settings (⚙)")
+        self.settings_btn.clicked.connect(self.open_settings_dialog)
+        
+        # Add buttons to layout
+        control_layout.addWidget(self.reset_btn)
+        control_layout.addWidget(self.rewind_10_btn)
+        control_layout.addWidget(self.para_start_btn)
+        control_layout.addStretch()
+        control_layout.addWidget(self.play_pause_btn)
+        control_layout.addWidget(self.settings_btn)
+        
+        control_bar.setLayout(control_layout)
+        layout.addWidget(control_bar)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximum(self.total_word_count)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #cccccc;
+                border-radius: 3px;
+                text-align: center;
+                background-color: #f0f0f0;
+            }
+            QProgressBar::chunk {
+                background-color: #007acc;
+                border-radius: 2px;
+            }
+        """)
+        layout.addWidget(self.progress_bar)
+        
+        # Central word display
+        self.word_label = QLabel("Ready to start reading...")
+        self.word_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.word_label.setWordWrap(True)
+        layout.addWidget(self.word_label, 1)  # Give it most of the space
+        
+        # Status label
+        self.status_label = QLabel()
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("color: #666; font-size: 12px;")
+        layout.addWidget(self.status_label)
+        
+        self.setLayout(layout)
+        
+        # Update initial status
+        self.update_status()
+    
+    def start_reading(self):
+        """Start the reading session."""
+        self.is_paused = False
+        self.update_timer_interval()
+        self.timer.start()
+        self.apply_styles()
+        self.show_next_word()
+        self.update_play_pause_button()
+    
+    def show_next_word(self):
+        """Display the next word in the sequence."""
+        if self.is_paused or self.current_index >= len(self.words):
+            if self.current_index >= len(self.words):
+                # Reached end of document
+                self.timer.stop()
+                self.is_paused = True
+                self.word_label.setText("Reading Complete!")
+                self.update_play_pause_button()
+                self.update_status()
+            return
+        
+        word = self.words[self.current_index]
+        
+        # Handle paragraph breaks
+        if word == "__PARAGRAPH_BREAK__":
+            self.timer.stop()
+            pause_ms = int(self.settings['para_delay'] * 1000)
+            QTimer.singleShot(pause_ms, self.resume_after_paragraph)
+            self.current_index += 1
+            return
+        
+        # Display the word
+        self.word_label.setText(word)
+        self.words_read += 1
+        self.current_index += 1
+        
+        # Update progress bar
+        self.progress_bar.setValue(self.words_read)
+        self.update_status()
+    
+    def resume_after_paragraph(self):
+        """Resume reading after paragraph pause."""
+        if not self.is_paused:
+            self.timer.start()
+        self.show_next_word()
+    
+    def toggle_play_pause(self):
+        """Toggle between play and pause states."""
+        self.is_paused = not self.is_paused
+        
+        if not self.is_paused:
+            self.timer.start()
+        else:
+            self.timer.stop()
+        
+        self.update_play_pause_button()
+        self.update_status()
+    
+    def update_play_pause_button(self):
+        """Update the play/pause button text and icon."""
+        if self.is_paused:
+            self.play_pause_btn.setText("Play (►)")
+        else:
+            self.play_pause_btn.setText("Pause (||)")
+    
+    def update_timer_interval(self):
+        """Update the timer interval based on WPM setting."""
+        delay_ms = (60 / self.settings['wpm']) * 1000
+        self.timer.setInterval(int(delay_ms))
+    
+    def apply_styles(self):
+        """Apply theme and font styles."""
+        if self.settings['theme'] == 'dark':
+            # Dark theme
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: #1e1e1e;
+                    color: #ffffff;
+                }
+                QPushButton {
+                    background-color: #3c3c3c;
+                    color: #ffffff;
+                    border: 1px solid #555555;
+                    border-radius: 3px;
+                    padding: 8px 12px;
+                }
+                QPushButton:hover {
+                    background-color: #4c4c4c;
+                }
+                QPushButton:pressed {
+                    background-color: #2c2c2c;
+                }
+            """)
+        else:
+            # Light theme
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: #ffffff;
+                    color: #000000;
+                }
+                QPushButton {
+                    background-color: #f0f0f0;
+                    color: #000000;
+                    border: 1px solid #cccccc;
+                    border-radius: 3px;
+                    padding: 8px 12px;
+                }
+                QPushButton:hover {
+                    background-color: #e0e0e0;
+                }
+                QPushButton:pressed {
+                    background-color: #d0d0d0;
+                }
+            """)
+        
+        # Apply font size to word label
+        font = QFont()
+        font.setPointSize(self.settings['font_size'])
+        self.word_label.setFont(font)
+    
+    def update_status(self):
+        """Update the status label with current reading information."""
+        if self.current_index >= len(self.words):
+            status = "Reading Complete!"
+        elif self.is_paused:
+            status = f"Paused - Word {self.words_read + 1} of {self.total_word_count}"
+        else:
+            status = f"Reading - Word {self.words_read + 1} of {self.total_word_count} ({self.settings['wpm']} WPM)"
+        
+        self.status_label.setText(status)
+    
+    def reset_reading(self):
+        """Reset reading to the beginning."""
+        self.timer.stop()
+        self.current_index = 0
+        self.words_read = 0
+        self.progress_bar.setValue(0)
+        self.word_label.setText("Ready to start reading...")
+        self.update_status()
+    
+    def rewind_10_words(self):
+        """Go back 10 words."""
+        self.timer.stop()
+        
+        # Count back 10 actual words (skip paragraph breaks)
+        words_to_go_back = 10
+        new_index = self.current_index
+        
+        while words_to_go_back > 0 and new_index > 0:
+            new_index -= 1
+            if self.words[new_index] != "__PARAGRAPH_BREAK__":
+                words_to_go_back -= 1
+        
+        self.current_index = new_index
+        self.words_read = max(0, self.words_read - 10)
+        self.progress_bar.setValue(self.words_read)
+        
+        if self.current_index < len(self.words):
+            self.word_label.setText(self.words[self.current_index])
+        
+        self.update_status()
+    
+    def rewind_to_paragraph(self):
+        """Go back to the start of the current paragraph."""
+        self.timer.stop()
+        
+        # Find the start of current paragraph
+        new_index = self.current_index
+        while new_index > 0:
+            new_index -= 1
+            if self.words[new_index] == "__PARAGRAPH_BREAK__":
+                new_index += 1  # Start after the break
+                break
+        
+        # Count words to adjust words_read counter
+        words_in_paragraph = 0
+        for i in range(new_index, self.current_index):
+            if self.words[i] != "__PARAGRAPH_BREAK__":
+                words_in_paragraph += 1
+        
+        self.current_index = new_index
+        self.words_read = max(0, self.words_read - words_in_paragraph)
+        self.progress_bar.setValue(self.words_read)
+        
+        if self.current_index < len(self.words):
+            self.word_label.setText(self.words[self.current_index])
+        
+        self.update_status()
+    
+    def open_settings_dialog(self):
+        """Open the settings dialog for on-the-fly changes."""
+        was_paused = self.is_paused
+        self.timer.stop()
+        
+        dialog = SettingsDialog(self.settings, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Update settings
+            new_settings = dialog.get_settings()
+            self.settings.update(new_settings)
+            
+            # Apply changes
+            self.apply_styles()
+            self.update_timer_interval()
+            
+            # Resume if it wasn't paused before
+            if not was_paused:
+                self.timer.start()
+        
+        self.update_status()
+    
+    def keyPressEvent(self, event):
+        """Handle key press events for hotkeys."""
+        if event.key() == Qt.Key.Key_Space:
+            self.toggle_play_pause()
+        elif event.key() == Qt.Key.Key_S:
+            self.open_settings_dialog()
+        elif event.key() == Qt.Key.Key_Escape:
+            self.close()
+        else:
+            super().keyPressEvent(event)
+    
+    def closeEvent(self, event):
+        """Handle window close event."""
+        # Stop timer
+        self.timer.stop()
+        
+        # Save progress
+        save_progress(self.file_path, self.current_index)
+        
+        # Emit closed signal to return to main window
+        self.closed.emit()
+        
+        event.accept()
