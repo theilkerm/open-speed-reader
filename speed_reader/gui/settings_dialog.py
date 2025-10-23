@@ -8,6 +8,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+from ..utils.language_manager import language_manager
+
 
 class SettingsDialog(QDialog):
     """Dialog for adjusting reading settings during reading."""
@@ -27,7 +29,7 @@ class SettingsDialog(QDialog):
     
     def init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("Reading Settings")
+        self.setWindowTitle(language_manager.get_text("settings_title"))
         self.setFixedSize(350, 300)
         self.setModal(True)
         
@@ -37,44 +39,48 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         
         # Settings group
-        settings_group = QGroupBox("Reading Settings")
+        self.settings_group = QGroupBox()
         settings_layout = QFormLayout()
         
         # Words Per Minute
         self.wpm_spinbox = QSpinBox()
         self.wpm_spinbox.setRange(100, 1000)
-        self.wpm_spinbox.setSuffix(" WPM")
-        settings_layout.addRow("Words Per Minute:", self.wpm_spinbox)
+        self.wpm_spinbox.setSuffix(language_manager.get_text("wpm_suffix"))
+        self.wpm_label = QLabel()
+        settings_layout.addRow(self.wpm_label, self.wpm_spinbox)
         
         # Font Size
         self.font_size_spinbox = QSpinBox()
         self.font_size_spinbox.setRange(24, 200)
-        self.font_size_spinbox.setSuffix(" px")
-        settings_layout.addRow("Font Size:", self.font_size_spinbox)
+        self.font_size_spinbox.setSuffix(language_manager.get_text("px_suffix"))
+        self.font_size_label = QLabel()
+        settings_layout.addRow(self.font_size_label, self.font_size_spinbox)
         
         # Paragraph Pause
         self.para_pause_spinbox = QDoubleSpinBox()
         self.para_pause_spinbox.setRange(0.0, 5.0)
         self.para_pause_spinbox.setSingleStep(0.1)
-        self.para_pause_spinbox.setSuffix(" sec")
-        settings_layout.addRow("Paragraph Pause:", self.para_pause_spinbox)
+        self.para_pause_spinbox.setSuffix(language_manager.get_text("sec_suffix"))
+        self.para_pause_label = QLabel()
+        settings_layout.addRow(self.para_pause_label, self.para_pause_spinbox)
         
         # Theme selection
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Light", "Dark"])
-        settings_layout.addRow("Theme:", self.theme_combo)
+        self.theme_combo.addItems([language_manager.get_text("light"), language_manager.get_text("dark")])
+        self.theme_label = QLabel()
+        settings_layout.addRow(self.theme_label, self.theme_combo)
         
-        settings_group.setLayout(settings_layout)
-        layout.addWidget(settings_group)
+        self.settings_group.setLayout(settings_layout)
+        layout.addWidget(self.settings_group)
         
         # Button layout
         button_layout = QHBoxLayout()
         
-        self.ok_btn = QPushButton("OK")
+        self.ok_btn = QPushButton()
         self.ok_btn.clicked.connect(self.accept)
         self.ok_btn.setDefault(True)
         
-        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn = QPushButton()
         self.cancel_btn.clicked.connect(self.reject)
         
         button_layout.addStretch()
@@ -83,6 +89,9 @@ class SettingsDialog(QDialog):
         
         layout.addLayout(button_layout)
         self.setLayout(layout)
+        
+        # Update UI text
+        self.update_ui_text()
         
         # Apply styling
         self.setStyleSheet("""
@@ -123,6 +132,40 @@ class SettingsDialog(QDialog):
             }
         """)
     
+    def update_ui_text(self):
+        """Update all UI text based on current language."""
+        # Update window title
+        self.setWindowTitle(language_manager.get_text("settings_title"))
+        
+        # Update group box title
+        self.settings_group.setTitle(language_manager.get_text("reading_settings"))
+        
+        # Update labels
+        self.wpm_label.setText(language_manager.get_text("words_per_minute") + ":")
+        self.font_size_label.setText(language_manager.get_text("font_size") + ":")
+        self.para_pause_label.setText(language_manager.get_text("paragraph_pause") + ":")
+        self.theme_label.setText(language_manager.get_text("theme") + ":")
+        
+        # Update button texts
+        self.ok_btn.setText(language_manager.get_text("ok"))
+        self.cancel_btn.setText(language_manager.get_text("cancel"))
+        
+        # Update spinbox suffixes
+        self.wpm_spinbox.setSuffix(language_manager.get_text("wpm_suffix"))
+        self.font_size_spinbox.setSuffix(language_manager.get_text("px_suffix"))
+        self.para_pause_spinbox.setSuffix(language_manager.get_text("sec_suffix"))
+        
+        # Update theme combo items
+        current_theme = self.theme_combo.currentText()
+        self.theme_combo.clear()
+        self.theme_combo.addItems([language_manager.get_text("light"), language_manager.get_text("dark")])
+        
+        # Restore theme selection
+        if current_theme == language_manager.get_text("light") or current_theme == "Light":
+            self.theme_combo.setCurrentText(language_manager.get_text("light"))
+        else:
+            self.theme_combo.setCurrentText(language_manager.get_text("dark"))
+    
     def set_initial_values(self):
         """Set the initial values from current settings."""
         self.wpm_spinbox.setValue(self.current_settings.get('wpm', 300))
@@ -130,11 +173,10 @@ class SettingsDialog(QDialog):
         self.para_pause_spinbox.setValue(self.current_settings.get('para_delay', 1.0))
         
         theme = self.current_settings.get('theme', 'light')
-        theme_text = theme.capitalize()
-        if theme_text in ["Light", "Dark"]:
-            self.theme_combo.setCurrentText(theme_text)
+        if theme == 'light':
+            self.theme_combo.setCurrentText(language_manager.get_text("light"))
         else:
-            self.theme_combo.setCurrentText("Light")
+            self.theme_combo.setCurrentText(language_manager.get_text("dark"))
     
     def get_settings(self):
         """

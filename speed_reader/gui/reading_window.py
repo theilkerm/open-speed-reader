@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QKeySequence
 
 from ..utils.state_manager import save_progress
+from ..utils.language_manager import language_manager
 from .settings_dialog import SettingsDialog
 
 
@@ -57,7 +58,7 @@ class ReadingWindow(QWidget):
     
     def init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("Speed Reader - Reading")
+        self.setWindowTitle(language_manager.get_text("reading_title"))
         # Set fullscreen properly
         self.showFullScreen()
         
@@ -72,25 +73,25 @@ class ReadingWindow(QWidget):
         control_layout.setContentsMargins(0, 0, 0, 0)
         
         # Control buttons
-        self.reset_btn = QPushButton("Reset (<<)")
+        self.reset_btn = QPushButton()
         self.reset_btn.clicked.connect(self.reset_reading)
         
-        self.rewind_10_btn = QPushButton("10 Words Back (<)")
+        self.rewind_10_btn = QPushButton()
         self.rewind_10_btn.clicked.connect(self.rewind_10_words)
         
-        self.para_start_btn = QPushButton("Paragraph Start (|<)")
+        self.para_start_btn = QPushButton()
         self.para_start_btn.clicked.connect(self.rewind_to_paragraph)
         
-        self.next_para_btn = QPushButton("Next Paragraph (|>)")
+        self.next_para_btn = QPushButton()
         self.next_para_btn.clicked.connect(self.jump_to_next_paragraph)
         
-        self.jump_btn = QPushButton("Jump to Word (#)")
+        self.jump_btn = QPushButton()
         self.jump_btn.clicked.connect(self.jump_to_word)
         
-        self.play_pause_btn = QPushButton("Play (►)")
+        self.play_pause_btn = QPushButton()
         self.play_pause_btn.clicked.connect(self.toggle_play_pause)
         
-        self.settings_btn = QPushButton("Settings (⚙)")
+        self.settings_btn = QPushButton()
         self.settings_btn.clicked.connect(self.open_settings_dialog)
         
         # Add buttons to layout
@@ -125,7 +126,7 @@ class ReadingWindow(QWidget):
         layout.addWidget(self.progress_bar)
         
         # Central word display
-        self.word_label = QLabel("Ready to start reading...")
+        self.word_label = QLabel()
         self.word_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.word_label.setWordWrap(True)
         layout.addWidget(self.word_label, 1)  # Give it most of the space
@@ -138,8 +139,29 @@ class ReadingWindow(QWidget):
         
         self.setLayout(layout)
         
-        # Update initial status
+        # Update UI text and initial status
+        self.update_ui_text()
         self.update_status()
+    
+    def update_ui_text(self):
+        """Update all UI text based on current language."""
+        # Update window title
+        self.setWindowTitle(language_manager.get_text("reading_title"))
+        
+        # Update button texts
+        self.reset_btn.setText(language_manager.get_text("reset"))
+        self.rewind_10_btn.setText(language_manager.get_text("rewind_10"))
+        self.para_start_btn.setText(language_manager.get_text("para_start"))
+        self.next_para_btn.setText(language_manager.get_text("next_para"))
+        self.jump_btn.setText(language_manager.get_text("jump_to_word"))
+        self.settings_btn.setText(language_manager.get_text("settings"))
+        
+        # Update play/pause button
+        self.update_play_pause_button()
+        
+        # Update word label if paused
+        if self.is_paused and self.current_index == 0:
+            self.word_label.setText(language_manager.get_text("ready_to_start"))
     
     def start_reading(self):
         """Start the reading session."""
@@ -157,7 +179,7 @@ class ReadingWindow(QWidget):
                 # Reached end of document
                 self.timer.stop()
                 self.is_paused = True
-                self.word_label.setText("Reading Complete!")
+                self.word_label.setText(language_manager.get_text("reading_complete"))
                 self.update_play_pause_button()
                 self.update_status()
             return
@@ -202,9 +224,9 @@ class ReadingWindow(QWidget):
     def update_play_pause_button(self):
         """Update the play/pause button text and icon."""
         if self.is_paused:
-            self.play_pause_btn.setText("Play (►)")
+            self.play_pause_btn.setText(language_manager.get_text("play"))
         else:
-            self.play_pause_btn.setText("Pause (||)")
+            self.play_pause_btn.setText(language_manager.get_text("pause"))
     
     def update_timer_interval(self):
         """Update the timer interval based on WPM setting."""
@@ -264,21 +286,21 @@ class ReadingWindow(QWidget):
     def update_status(self):
         """Update the status label with current reading information."""
         if self.current_index >= len(self.words):
-            status = "Reading Complete!"
+            status = language_manager.get_text("reading_complete")
         elif self.is_paused:
             remaining_words = self.total_word_count - self.words_read
             eta_minutes = remaining_words / self.settings['wpm'] if self.settings['wpm'] > 0 else 0
             eta_hours = int(eta_minutes // 60)
             eta_mins = int(eta_minutes % 60)
-            eta_text = f"{eta_hours}h {eta_mins}m" if eta_hours > 0 else f"{eta_mins}m"
-            status = f"Paused - Word {self.words_read + 1} of {self.total_word_count} - ETA: {eta_text}"
+            eta_text = f"{eta_hours}{language_manager.get_text('hours')} {eta_mins}{language_manager.get_text('minutes')}" if eta_hours > 0 else f"{eta_mins}{language_manager.get_text('minutes')}"
+            status = f"{language_manager.get_text('paused')} - {language_manager.get_text('word_of')} {self.words_read + 1} {self.total_word_count} - {language_manager.get_text('eta')}: {eta_text}"
         else:
             remaining_words = self.total_word_count - self.words_read
             eta_minutes = remaining_words / self.settings['wpm'] if self.settings['wpm'] > 0 else 0
             eta_hours = int(eta_minutes // 60)
             eta_mins = int(eta_minutes % 60)
-            eta_text = f"{eta_hours}h {eta_mins}m" if eta_hours > 0 else f"{eta_mins}m"
-            status = f"Reading - Word {self.words_read + 1} of {self.total_word_count} ({self.settings['wpm']} WPM) - ETA: {eta_text}"
+            eta_text = f"{eta_hours}{language_manager.get_text('hours')} {eta_mins}{language_manager.get_text('minutes')}" if eta_hours > 0 else f"{eta_mins}{language_manager.get_text('minutes')}"
+            status = f"{language_manager.get_text('reading')} - {language_manager.get_text('word_of')} {self.words_read + 1} {self.total_word_count} ({self.settings['wpm']} {language_manager.get_text('wpm_suffix').strip()}) - {language_manager.get_text('eta')}: {eta_text}"
         
         self.status_label.setText(status)
     
@@ -288,7 +310,7 @@ class ReadingWindow(QWidget):
         self.current_index = 0
         self.words_read = 0
         self.progress_bar.setValue(0)
-        self.word_label.setText("Ready to start reading...")
+        self.word_label.setText(language_manager.get_text("ready_to_start"))
         self.update_status()
     
     def rewind_10_words(self):
@@ -376,8 +398,8 @@ class ReadingWindow(QWidget):
         
         word_num, ok = QInputDialog.getInt(
             self, 
-            "Jump to Word", 
-            f"Enter word number (1-{max_word}):", 
+            language_manager.get_text("jump_to_word_title"), 
+            f"{language_manager.get_text('enter_word_number')} (1-{max_word}):", 
             current_word, 
             1, 
             max_word, 
