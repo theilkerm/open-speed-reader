@@ -125,3 +125,23 @@ dmypy.json
 
 # Speed Reader specific files
 progress.json
+
+# Build and distribution files
+dist/
+build/
+installer/
+*.exe
+*.msi
+*.deb
+*.rpm
+*.dmg
+*.app
+*.pkg
+
+# Icons and assets
+icon.ico
+*.ico
+
+# Build scripts and temporary files
+build.bat
+*.spec
