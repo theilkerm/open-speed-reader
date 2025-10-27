@@ -2,9 +2,9 @@
 AppName=Speed Reader
 AppVersion=1.0.0
 AppPublisher=Speed Reader Team
-AppPublisherURL=https://github.com/yourusername/open-speed-reader
-AppSupportURL=https://github.com/yourusername/open-speed-reader/issues
-AppUpdatesURL=https://github.com/yourusername/open-speed-reader/releases
+AppPublisherURL=https://github.com/theilkerm/open-speed-reader
+AppSupportURL=https://github.com/theilkerm/open-speed-reader/issues
+AppUpdatesURL=https://github.com/theilkerm/open-speed-reader/releases
 DefaultDirName={autopf}\SpeedReader
 DefaultGroupName=Speed Reader
 AllowNoIcons=yes
